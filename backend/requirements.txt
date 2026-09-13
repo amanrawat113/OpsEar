@@ -1,0 +1,10 @@
+mcp>=2.0.0,<3.0.0           # MCP Python SDK v2 — MCPServer (formerly FastMCP), Streamable HTTP, 2026-07-28 spec
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+strands-agents>=1.53.0     # Strands agent framework
+strands-agents-tools>=0.1.0 # optional pre-built tools (calculator, retrieve, etc.)
+boto3>=1.35.0               # Bedrock client
+
+pydantic>=2.8.0
+python-dotenv>=1.0.0
