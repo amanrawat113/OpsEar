@@ -21,6 +21,7 @@ import argparse
 from mcp.server import MCPServer
 
 from backend.app.tools import queries
+from backend.app.agent.rca_agent import investigate as run_investigation
 
 mcp = MCPServer(
     name="opsear",
@@ -94,12 +95,34 @@ def get_kubernetes_events(service: str, minutes: int = 30) -> dict:
     within the last N minutes (default 30)."""
     return queries.get_kubernetes_events(service, minutes)
 
+@mcp.tool()
+def get_service_health(service: str) -> dict:
+    """Get a quick health snapshot for a service: status (healthy/degraded/
+    critical) plus latest metrics vs baseline. Call this FIRST when
+    investigating an incident, before drilling into logs/traces/deployments.
+    """
+    return queries.get_service_health(service)
+
 
 @mcp.tool()
 def get_pod_status(service: str) -> dict:
     """Get current replica count and any recent crash-loop related
     Kubernetes events for a service."""
     return queries.get_pod_status(service)
+
+
+
+@mcp.tool()
+def investigate_incident(question: str) -> dict:
+    """High-level investigation tool for voice/conversational callers (e.g. Alexa+).
+    Runs the full agent — autonomous tool selection across metrics, logs, traces,
+    deployments, and Kubernetes events — and returns a structured root cause
+    analysis with evidence and a recommended action. Use this instead of calling
+    the individual observability tools directly when the caller just wants an
+    answer to "why is X failing?" or similar.
+    """
+    rca = run_investigation(question, mcp_url="http://127.0.0.1:8000/mcp")
+    return rca.model_dump()
 
 
 def main():

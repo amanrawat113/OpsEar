@@ -12,7 +12,7 @@ the MCP tool signatures stay the same.
 from datetime import datetime, timedelta, timezone
 
 from simulator.telemetry.store import get_conn
-
+from simulator.services.topology import SERVICES
 DEFAULT_WINDOW_MINUTES = 30
 
 
@@ -300,4 +300,51 @@ def get_pod_status(service: str) -> dict:
         "service": service,
         **replica_info,
         "crash_related_events": crash_related,
+    }
+
+
+def get_service_health(service: str) -> dict:
+    """Get a one-call health snapshot for a service: latest metrics vs
+    their normal baseline, plus a simple status label.
+
+    Args:
+        service: Service name, e.g. "checkout-service".
+
+    Returns:
+        A dict with status ("healthy" / "degraded" / "critical"),
+        the latest values for latency/error_rate/cpu/mem, and their
+        baseline values for comparison. This is meant to be the first
+        tool called in an investigation — "is this thing unhealthy,
+        and by how much?" — before drilling into logs/traces/etc.
+    """
+    baseline = SERVICES.get(service)
+
+    with get_conn() as conn:
+        latest = {}
+        for metric in ["latency_ms", "error_rate", "cpu_pct", "mem_pct"]:
+            row = conn.execute(
+                "SELECT value FROM metrics WHERE service = ? AND metric_name = ? "
+                "ORDER BY ts DESC LIMIT 1",
+                (service, metric),
+            ).fetchone()
+            latest[metric] = row["value"] if row else None
+
+    status = "healthy"
+    if baseline and latest["error_rate"] is not None:
+        if latest["error_rate"] > baseline.baseline_error_rate * 5:
+            status = "critical"
+        elif latest["error_rate"] > baseline.baseline_error_rate * 2:
+            status = "degraded"
+    if baseline and status == "healthy" and latest["latency_ms"] is not None:
+        if latest["latency_ms"] > baseline.baseline_latency_ms * 2:
+            status = "degraded"
+
+    return {
+        "service": service,
+        "status": status,
+        "latest": latest,
+        "baseline": {
+            "latency_ms": baseline.baseline_latency_ms,
+            "error_rate": baseline.baseline_error_rate,
+        } if baseline else None,
     }
